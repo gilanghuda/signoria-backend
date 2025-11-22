@@ -8,3 +8,6 @@ pyjwt
 python-dotenv
 SQLAlchemy
 alembic
+numpy
+scikit-learn
+joblib

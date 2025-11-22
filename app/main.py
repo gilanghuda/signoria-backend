@@ -5,6 +5,8 @@ import uvicorn
 from dotenv import load_dotenv
 from app.api.routes.auth_routes import router as auth_router
 from app.api.routes.user_routes import router as user_router
+from app.api.routes.predict_routes import router as predict_router
+from app.core.ml_loader import load_model_safe
 
 # Load environment variables
 load_dotenv()
@@ -46,6 +48,12 @@ async def root():
 # Include routers
 app.include_router(auth_router)
 app.include_router(user_router)
+app.include_router(predict_router)
+
+@app.on_event("startup")
+async def startup_event():
+    """Load ML models on application startup"""
+    load_model_safe()
 
 if __name__ == "__main__":
     ssl_keyfile = SSL_KEYFILE if USE_HTTPS else None
