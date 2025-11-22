@@ -19,10 +19,15 @@ services:
       retries: 5
 
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: signoria_api
     env_file:
       - .env
+    environment:
+      DATABASE_URL: postgresql://${DB_DOCKER_USER}:${DB_DOCKER_PASSWORD}@${DB_DOCKER_HOST}:${DB_DOCKER_PORT}/${DB_DOCKER_NAME}
+      SERVER_HOST: 0.0.0.0
     ports:
       - "${SERVER_PORT}:8000"
     depends_on:
