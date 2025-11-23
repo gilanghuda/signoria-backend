@@ -15,12 +15,12 @@ async def get_status():
     return PredictService.get_api_status()
 
 @router.post("/number", response_model=PredictionResponse)
-async def predict_number(data: VectorInput, user_id: str = Depends(get_current_user)):
+async def predict_number(data: VectorInput):
     """Predict SIBI number from vector"""
     return PredictService.predict_vector("number", data.vector)
 
 @router.post("/alphabet", response_model=PredictionResponse)
-async def predict_alphabet(data: VectorInput, user_id: str = Depends(get_current_user)):
+async def predict_alphabet(data: VectorInput):
     """Predict SIBI alphabet from vector"""
     return PredictService.predict_vector("alphabet", data.vector)
 
