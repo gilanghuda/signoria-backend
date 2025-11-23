@@ -10,8 +10,7 @@ class UserService:
         response.set_cookie(
             key="access_token",
             value=token,
-            httponly=True,
-            secure=true,  # Set to True in production with HTTPS
+            httponly=True,  
             samesite="none",
             max_age=86400  # 24 hours
         )
