@@ -11,8 +11,8 @@ class UserService:
             key="access_token",
             value=token,
             httponly=True,
-            secure=False,  # Set to True in production with HTTPS
-            samesite="lax",
+            secure=true,  # Set to True in production with HTTPS
+            samesite="none",
             max_age=86400  # 24 hours
         )
     
