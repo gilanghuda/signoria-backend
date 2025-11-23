@@ -1,11 +1,13 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 from dotenv import load_dotenv
 from app.api.routes.auth_routes import router as auth_router
 from app.api.routes.user_routes import router as user_router
 from app.api.routes.predict_routes import router as predict_router
+from app.api.routes.quiz_routes import router as quiz_router
 from app.core.ml_loader import load_model_safe
 
 # Load environment variables
@@ -49,6 +51,18 @@ async def root():
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(predict_router)
+app.include_router(quiz_router)
+
+# Mount static files for dictionary images
+# Create static directory if it doesn't exist
+dict_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dict")
+dictionary_dir = os.path.join(dict_dir, "dictionary")
+
+# Ensure directories exist
+os.makedirs(dictionary_dir, exist_ok=True)
+
+# Mount the dict directory
+app.mount("/dict", StaticFiles(directory=dict_dir, html=False), name="dict")
 
 @app.on_event("startup")
 async def startup_event():
