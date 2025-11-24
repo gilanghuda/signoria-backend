@@ -367,28 +367,7 @@ def submit_answer(
     }
     ```
     
-    **Returns:**
-    - `answer_id`: ID of this submitted answer
-    - `is_correct`: Boolean (true/false) - Use for immediate feedback ONLY
-    
-    **⚠️ IMPORTANT NOTES:**
-    1. Server stores the answer (you don't need to track it)
-    2. Do NOT use `is_correct` to update final score
-    3. Final score is calculated on `/submit` endpoint
-    4. Call this for each question as user progresses through quiz
-    
-    **Example Request:**
-    ```
-    POST /api/quizzes/550e8400-e29b-41d4-a716-446655440000/attempts/770e8400-e29b-41d4-a716-446655440000/answers
-    Content-Type: application/json
-    
-    {
-      "question_id": "660e8400-e29b-41d4-a716-446655440001",
-      "selected_option_id": "770e8400-e29b-41d4-a716-446655440001"
-    }
-    ```
-    
-    **Example Response:**
+    **Returns (Success):**
     ```json
     {
       "status": "success",
@@ -401,6 +380,103 @@ def submit_answer(
       }
     }
     ```
+    
+    **Error: Answer Already Exists (400)**
+    ```json
+    {
+      "status": "error",
+      "code": "ANSWER_ALREADY_EXISTS",
+      "message": "You have already answered this question. You cannot answer it twice.",
+      "data": {
+        "answer_id": "990e8400-e29b-41d4-a716-446655440000",
+        "question_id": "660e8400-e29b-41d4-a716-446655440001",
+        "attempt_id": "770e8400-e29b-41d4-a716-446655440000",
+        "answered_at": "2025-11-24T10:15:30"
+      }
+    }
+    ```
+    
+    **Error: Attempt Already Completed (400)**
+    ```json
+    {
+      "status": "error",
+      "code": "ATTEMPT_COMPLETED",
+      "message": "This quiz attempt has already been submitted. You cannot submit more answers.",
+      "data": null
+    }
+    ```
+    
+    **Error: Attempt Not Found (404)**
+    ```json
+    {
+      "status": "error",
+      "code": "ATTEMPT_NOT_FOUND",
+      "message": "Attempt not found",
+      "data": null
+    }
+    ```
+    
+    **Error: Invalid Question or Option (400)**
+    ```json
+    {
+      "status": "error",
+      "code": "INVALID_DATA",
+      "message": "Question or option not found",
+      "data": null
+    }
+    ```
+    
+    **⚠️ Frontend Error Handling:**
+    ```javascript
+    async function submitAnswer(quizId, attemptId, questionId, optionId) {
+      const response = await fetch(
+        \`/api/quizzes/\${quizId}/attempts/\${attemptId}/answers\`,
+        {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            question_id: questionId,
+            selected_option_id: optionId
+          })
+        }
+      );
+      
+      const result = await response.json();
+      
+      if (result.status === 'error') {
+        // Handle different error codes
+        switch (result.code) {
+          case 'ANSWER_ALREADY_EXISTS':
+            alert('❌ You already answered this question!');
+            console.log('Previously answered at:', result.data.answered_at);
+            break;
+            
+          case 'ATTEMPT_COMPLETED':
+            alert('❌ Quiz already submitted! No more answers allowed.');
+            break;
+            
+          case 'ATTEMPT_NOT_FOUND':
+            alert('❌ Attempt not found. Start quiz again.');
+            break;
+            
+          case 'INVALID_DATA':
+            alert('❌ Invalid question or option.');
+            break;
+            
+          default:
+            alert('❌ Error: ' + result.message);
+        }
+        return;
+      }
+      
+      // Success - show feedback
+      if (result.data.is_correct) {
+        alert('✓ Correct!');
+      } else {
+        alert('✗ Wrong answer');
+      }
+    }
+    ```
     """
     result = QuizService.submit_answer(
         db,
@@ -409,15 +485,25 @@ def submit_answer(
         request.selected_option_id
     )
     
-    if not result:
+    if result["error"]:
+        # Determine HTTP status code based on error code
+        status_code = status.HTTP_400_BAD_REQUEST
+        if result["code"] in ["ATTEMPT_NOT_FOUND", "QUESTION_NOT_FOUND"]:
+            status_code = status.HTTP_404_NOT_FOUND
+        
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Attempt, question, or option not found"
+            status_code=status_code,
+            detail={
+                "status": "error",
+                "code": result["code"],
+                "message": result["message"],
+                "data": result["data"]
+            }
         )
     
     return {
         "status": "success",
-        "data": result
+        "data": result["data"]
     }
 
 
@@ -444,27 +530,7 @@ def submit_camera_answer(
     }
     ```
     
-    **Returns:**
-    - `answer_id`: ID of this submitted answer
-    - `is_correct`: Result from your ML model
-    
-    **⚠️ IMPORTANT:**
-    - Use this endpoint for `question_category: "camera_based"` ONLY
-    - `is_correct` must come from YOUR gesture recognition ML model
-    - Server stores this result and scores it on submission
-    
-    **Example Request:**
-    ```
-    POST /api/quizzes/550e8400-e29b-41d4-a716-446655440000/attempts/770e8400-e29b-41d4-a716-446655440000/camera-answers
-    Content-Type: application/json
-    
-    {
-      "question_id": "660e8400-e29b-41d4-a716-446655440001",
-      "is_correct": true
-    }
-    ```
-    
-    **Example Response:**
+    **Returns (Success):**
     ```json
     {
       "status": "success",
@@ -476,6 +542,72 @@ def submit_camera_answer(
       }
     }
     ```
+    
+    **Error: Answer Already Exists (400)**
+    ```json
+    {
+      "status": "error",
+      "code": "ANSWER_ALREADY_EXISTS",
+      "message": "You have already answered this question. You cannot answer it twice.",
+      "data": {
+        "answer_id": "990e8400-e29b-41d4-a716-446655440000",
+        "question_id": "660e8400-e29b-41d4-a716-446655440001",
+        "attempt_id": "770e8400-e29b-41d4-a716-446655440000",
+        "answered_at": "2025-11-24T10:15:30"
+      }
+    }
+    ```
+    
+    **Error: Attempt Already Completed (400)**
+    ```json
+    {
+      "status": "error",
+      "code": "ATTEMPT_COMPLETED",
+      "message": "This quiz attempt has already been submitted. You cannot submit more answers.",
+      "data": null
+    }
+    ```
+    
+    **⚠️ Frontend Error Handling:**
+    ```javascript
+    async function submitCameraAnswer(quizId, attemptId, questionId, mlPrediction) {
+      const response = await fetch(
+        \`/api/quizzes/\${quizId}/attempts/\${attemptId}/camera-answers\`,
+        {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            question_id: questionId,
+            is_correct: mlPrediction
+          })
+        }
+      );
+      
+      const result = await response.json();
+      
+      if (result.status === 'error') {
+        switch (result.code) {
+          case 'ANSWER_ALREADY_EXISTS':
+            alert('❌ You already performed this gesture!');
+            console.log('Previously answered at:', result.data.answered_at);
+            // Disable re-attempt
+            disableCamera();
+            break;
+            
+          case 'ATTEMPT_COMPLETED':
+            alert('❌ Quiz already submitted!');
+            break;
+            
+          default:
+            alert('❌ Error: ' + result.message);
+        }
+        return;
+      }
+      
+      // Success
+      alert(result.data.is_correct ? '✓ Correct gesture!' : '✗ Wrong gesture');
+    }
+    ```
     """
     result = QuizService.submit_camera_answer(
         db,
@@ -484,15 +616,25 @@ def submit_camera_answer(
         request.is_correct
     )
     
-    if not result:
+    if result["error"]:
+        # Determine HTTP status code based on error code
+        status_code = status.HTTP_400_BAD_REQUEST
+        if result["code"] in ["ATTEMPT_NOT_FOUND", "QUESTION_NOT_FOUND"]:
+            status_code = status.HTTP_404_NOT_FOUND
+        
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Attempt or question not found"
+            status_code=status_code,
+            detail={
+                "status": "error",
+                "code": result["code"],
+                "message": result["message"],
+                "data": result["data"]
+            }
         )
     
     return {
         "status": "success",
-        "data": result
+        "data": result["data"]
     }
 
 

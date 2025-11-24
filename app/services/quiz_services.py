@@ -111,23 +111,62 @@ class QuizService:
         attempt = QuizRepository.get_attempt_by_id(connection, attempt_id)
         
         if not attempt:
-            return None
+            return {
+                "error": True,
+                "code": "ATTEMPT_NOT_FOUND",
+                "message": "Attempt not found",
+                "data": None
+            }
+        
+        # Check if attempt is already completed
+        if attempt["is_completed"]:
+            return {
+                "error": True,
+                "code": "ATTEMPT_COMPLETED",
+                "message": "This quiz attempt has already been submitted. You cannot submit more answers.",
+                "data": None
+            }
+        
+        # Check if user already answered this question
+        existing_answer = QuizRepository.get_answer_by_attempt_question(connection, attempt_id, question_id)
+        if existing_answer:
+            return {
+                "error": True,
+                "code": "ANSWER_ALREADY_EXISTS",
+                "message": "You have already answered this question. You cannot answer it twice.",
+                "data": {
+                    "answer_id": existing_answer["id"],
+                    "question_id": question_id,
+                    "attempt_id": attempt_id,
+                    "answered_at": existing_answer["created_at"].isoformat() if existing_answer["created_at"] else None
+                }
+            }
         
         question = QuizRepository.get_question_by_id(connection, question_id)
         option = QuizRepository.get_option_by_id(connection, selected_option_id)
         
         if not question or not option:
-            return None
+            return {
+                "error": True,
+                "code": "INVALID_DATA",
+                "message": "Question or option not found",
+                "data": None
+            }
         
         answer_id = str(uuid.uuid4())
         answer = QuizRepository.create_attempt_answer(connection, answer_id, attempt_id, question_id, selected_option_id)
         
         return {
-            "answer_id": answer["id"],
-            "attempt_id": answer["attempt_id"],
-            "question_id": answer["question_id"],
-            "selected_option_id": answer["selected_option_id"],
-            "is_correct": option["is_correct"],
+            "error": False,
+            "code": "SUCCESS",
+            "message": "Answer submitted successfully",
+            "data": {
+                "answer_id": answer["id"],
+                "attempt_id": answer["attempt_id"],
+                "question_id": answer["question_id"],
+                "selected_option_id": answer["selected_option_id"],
+                "is_correct": option["is_correct"],
+            }
         }
     
     @staticmethod
@@ -136,131 +175,55 @@ class QuizService:
         attempt = QuizRepository.get_attempt_by_id(connection, attempt_id)
         
         if not attempt:
-            return None
+            return {
+                "error": True,
+                "code": "ATTEMPT_NOT_FOUND",
+                "message": "Attempt not found",
+                "data": None
+            }
+        
+        # Check if attempt is already completed
+        if attempt["is_completed"]:
+            return {
+                "error": True,
+                "code": "ATTEMPT_COMPLETED",
+                "message": "This quiz attempt has already been submitted. You cannot submit more answers.",
+                "data": None
+            }
+        
+        # Check if user already answered this question
+        existing_answer = QuizRepository.get_answer_by_attempt_question(connection, attempt_id, question_id)
+        if existing_answer:
+            return {
+                "error": True,
+                "code": "ANSWER_ALREADY_EXISTS",
+                "message": "You have already answered this question. You cannot answer it twice.",
+                "data": {
+                    "answer_id": existing_answer["id"],
+                    "question_id": question_id,
+                    "attempt_id": attempt_id,
+                    "answered_at": existing_answer["created_at"].isoformat() if existing_answer["created_at"] else None
+                }
+            }
         
         question = QuizRepository.get_question_by_id(connection, question_id)
         
         if not question:
-            return None
+            return {
+                "error": True,
+                "code": "QUESTION_NOT_FOUND",
+                "message": "Question not found",
+                "data": None
+            }
         
         options = QuizRepository.get_options_by_question(connection, question_id)
         camera_option = options[0] if options else None
         
         if not camera_option:
-            return None
-        
-        answer_id = str(uuid.uuid4())
-        answer = QuizRepository.create_attempt_answer(connection, answer_id, attempt_id, question_id, camera_option["id"])
-        
-        return {
-            "answer_id": answer["id"],
-            "attempt_id": answer["attempt_id"],
-            "question_id": answer["question_id"],
-            "is_correct": is_correct,
-        }
-    
-    @staticmethod
-    def submit_quiz(connection, attempt_id: str):
-        """Submit/complete a quiz attempt and calculate final score"""
-        attempt = QuizRepository.get_attempt_by_id(connection, attempt_id)
-        
-        if not attempt:
-            return None
-        
-        answers = QuizRepository.get_attempt_answers(connection, attempt_id)
-        
-        # Calculate score
-        correct_count = 0
-        for answer in answers:
-            option = QuizRepository.get_option_by_id(connection, answer["selected_option_id"])
-            if option and option["is_correct"]:
-                correct_count += 1
-        
-        # Update attempt
-        attempt = QuizRepository.update_attempt_score(connection, attempt_id, correct_count)
-        
-        return {
-            "attempt_id": attempt["id"],
-            "quiz_id": attempt["quiz_id"],
-            "user_id": attempt["user_id"],
-            "score": attempt["score"],
-            "total_questions": attempt["total_questions"],
-            "percentage": round((attempt["score"] / attempt["total_questions"] * 100), 2),
-            "is_completed": attempt["is_completed"],
-            "submitted_at": attempt["submitted_at"].isoformat() if attempt["submitted_at"] else None,
-        }
-    
-    @staticmethod
-    def get_attempt_result(connection, attempt_id: str):
-        """Get detailed attempt result"""
-        attempt = QuizRepository.get_attempt_by_id(connection, attempt_id)
-        
-        if not attempt:
-            return None
-        
-        answers = QuizRepository.get_attempt_answers(connection, attempt_id)
-        
-        answers_detail = []
-        for answer in answers:
-            question = QuizRepository.get_question_by_id(connection, answer["question_id"])
-            option = QuizRepository.get_option_by_id(connection, answer["selected_option_id"])
-            
-            answers_detail.append({
-                "question_id": answer["question_id"],
-                "question_text": question["question_text"] if question else None,
-                "question_category": question["question_category"] if question else None,
-                "selected_option_id": answer["selected_option_id"],
-                "selected_option_content": option["content"] if option else None,
-                "is_correct": option["is_correct"] if option else False,
-                "explanation": question["explanation"] if question else None,
-            })
-        
-        return {
-            "attempt_id": attempt["id"],
-            "quiz_id": attempt["quiz_id"],
-            "user_id": attempt["user_id"],
-            "score": attempt["score"],
-            "total_questions": attempt["total_questions"],
-            "percentage": round((attempt["score"] / attempt["total_questions"] * 100), 2),
-            "is_completed": attempt["is_completed"],
-            "submitted_at": attempt["submitted_at"].isoformat() if attempt["submitted_at"] else None,
-            "answers": answers_detail,
-        }
-    
-    @staticmethod
-    def get_attempt_progress(connection, attempt_id: str):
-        """Get detailed progress of an ongoing attempt with answered questions"""
-        progress = QuizRepository.get_attempt_progress(connection, attempt_id)
-        
-        if not progress:
-            return None
-        
-        # Get detailed information about answered questions
-        answered_questions = QuizRepository.get_answered_questions_details(connection, attempt_id)
-        
-        # Format answered questions
-        answered_details = [
-            {
-                "answer_id": answer["answer_id"],
-                "question_id": answer["question_id"],
-                "question_text": answer["question_text"],
-                "question_category": answer["question_category"],
-                "selected_option_id": answer["selected_option_id"],
-                "selected_option_content": answer["selected_option_content"],
-                "is_correct": answer["is_correct"],
-                "answered_at": answer["answered_at"].isoformat() if answer["answered_at"] else None,
+            return {
+                "error": True,
+                "code": "OPTION_NOT_FOUND",
+                "message": "Camera option not found",
+                "data": None
             }
-            for answer in answered_questions
-        ]
-        
-        return {
-            "attempt_id": progress["id"],
-            "quiz_id": progress["quiz_id"],
-            "user_id": progress["user_id"],
-            "total_questions": progress["total_questions"],
-            "answered_questions": progress["answered_questions"],
-            "remaining_questions": progress["remaining_questions"],
-            "progress_percentage": round((progress["answered_questions"] / progress["total_questions"] * 100), 2),
-            "is_completed": progress["is_completed"],
-            "answered_details": answered_details,  # NEW: Detailed answered questions
-        }
+       

@@ -435,3 +435,27 @@ class QuizRepository:
             }
             for row in results
         ]
+    
+    @staticmethod
+    def get_answer_by_attempt_question(connection, attempt_id: str, question_id: str) -> dict:
+        """Check if user already answered this question"""
+        cursor = connection.cursor()
+        query = """
+            SELECT id, attempt_id, question_id, selected_option_id, created_at
+            FROM attempts_quiz_answer
+            WHERE attempt_id = %s AND question_id = %s
+            LIMIT 1
+        """
+        cursor.execute(query, (attempt_id, question_id))
+        result = cursor.fetchone()
+        cursor.close()
+        
+        if result:
+            return {
+                "id": result[0],
+                "attempt_id": result[1],
+                "question_id": result[2],
+                "selected_option_id": result[3],
+                "created_at": result[4],
+            }
+        return None
