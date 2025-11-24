@@ -329,3 +329,109 @@ class QuizRepository:
                 "is_completed": result[6],
             }
         return None
+    
+    @staticmethod
+    def get_ongoing_attempt(connection, quiz_id: str, user_id: str) -> dict:
+        """Get ongoing (not completed) attempt for user on a quiz"""
+        cursor = connection.cursor()
+        query = """
+            SELECT id, quiz_id, user_id, score, total_questions, submitted_at, is_completed
+            FROM attempts_quiz
+            WHERE quiz_id = %s AND user_id = %s AND is_completed = false
+            ORDER BY submitted_at DESC
+            LIMIT 1
+        """
+        cursor.execute(query, (quiz_id, user_id))
+        result = cursor.fetchone()
+        cursor.close()
+        
+        if result:
+            return {
+                "id": result[0],
+                "quiz_id": result[1],
+                "user_id": result[2],
+                "score": result[3],
+                "total_questions": result[4],
+                "submitted_at": result[5],
+                "is_completed": result[6],
+            }
+        return None
+    
+    @staticmethod
+    def get_attempt_progress(connection, attempt_id: str) -> dict:
+        """Get attempt progress - count of answered questions"""
+        cursor = connection.cursor()
+        
+        # Get attempt details
+        query = """
+            SELECT id, quiz_id, user_id, score, total_questions, submitted_at, is_completed
+            FROM attempts_quiz
+            WHERE id = %s
+        """
+        cursor.execute(query, (attempt_id,))
+        attempt = cursor.fetchone()
+        
+        if not attempt:
+            cursor.close()
+            return None
+        
+        # Count answered questions
+        count_query = """
+            SELECT COUNT(*) FROM attempts_quiz_answer
+            WHERE attempt_id = %s
+        """
+        cursor.execute(count_query, (attempt_id,))
+        answered_count = cursor.fetchone()[0]
+        cursor.close()
+        
+        return {
+            "id": attempt[0],
+            "quiz_id": attempt[1],
+            "user_id": attempt[2],
+            "score": attempt[3],
+            "total_questions": attempt[4],
+            "answered_questions": answered_count,
+            "remaining_questions": attempt[4] - answered_count,
+            "submitted_at": attempt[5],
+            "is_completed": attempt[6],
+        }
+    
+    @staticmethod
+    def get_answered_questions_details(connection, attempt_id: str) -> list[dict]:
+        """Get detailed information about answered questions"""
+        cursor = connection.cursor()
+        query = """
+            SELECT 
+                aqa.id,
+                aqa.attempt_id,
+                aqa.question_id,
+                aqa.selected_option_id,
+                qq.question_text,
+                qq.question_category,
+                qo.content as selected_option_content,
+                qo.is_correct,
+                aqa.created_at
+            FROM attempts_quiz_answer aqa
+            JOIN quiz_questions qq ON aqa.question_id = qq.id
+            JOIN quiz_options qo ON aqa.selected_option_id = qo.id
+            WHERE aqa.attempt_id = %s
+            ORDER BY aqa.created_at ASC
+        """
+        cursor.execute(query, (attempt_id,))
+        results = cursor.fetchall()
+        cursor.close()
+        
+        return [
+            {
+                "answer_id": row[0],
+                "attempt_id": row[1],
+                "question_id": row[2],
+                "selected_option_id": row[3],
+                "question_text": row[4],
+                "question_category": row[5],
+                "selected_option_content": row[6],
+                "is_correct": row[7],
+                "answered_at": row[8],
+            }
+            for row in results
+        ]

@@ -70,12 +70,27 @@ class QuizService:
     
     @staticmethod
     def start_quiz_attempt(connection, quiz_id: str, user_id: str):
-        """Start a new quiz attempt"""
+        """Start a new quiz attempt or resume ongoing attempt"""
         quiz = QuizRepository.get_quiz_by_id(connection, quiz_id)
         
         if not quiz:
             return None
         
+        # Check if user already has an ongoing attempt
+        ongoing_attempt = QuizRepository.get_ongoing_attempt(connection, quiz_id, user_id)
+        
+        if ongoing_attempt:
+            # Return existing ongoing attempt with progress
+            return {
+                "attempt_id": ongoing_attempt["id"],
+                "quiz_id": ongoing_attempt["quiz_id"],
+                "user_id": ongoing_attempt["user_id"],
+                "total_questions": ongoing_attempt["total_questions"],
+                "is_completed": ongoing_attempt["is_completed"],
+                "is_resumed": True,  # Indicate this is a resumed attempt
+            }
+        
+        # Create new attempt only if no ongoing attempt exists
         questions = QuizRepository.get_questions_by_quiz(connection, quiz_id)
         attempt_id = str(uuid.uuid4())
         
@@ -87,6 +102,7 @@ class QuizService:
             "user_id": attempt["user_id"],
             "total_questions": attempt["total_questions"],
             "is_completed": attempt["is_completed"],
+            "is_resumed": False,  # New attempt
         }
     
     @staticmethod
@@ -209,4 +225,42 @@ class QuizService:
             "is_completed": attempt["is_completed"],
             "submitted_at": attempt["submitted_at"].isoformat() if attempt["submitted_at"] else None,
             "answers": answers_detail,
+        }
+    
+    @staticmethod
+    def get_attempt_progress(connection, attempt_id: str):
+        """Get detailed progress of an ongoing attempt with answered questions"""
+        progress = QuizRepository.get_attempt_progress(connection, attempt_id)
+        
+        if not progress:
+            return None
+        
+        # Get detailed information about answered questions
+        answered_questions = QuizRepository.get_answered_questions_details(connection, attempt_id)
+        
+        # Format answered questions
+        answered_details = [
+            {
+                "answer_id": answer["answer_id"],
+                "question_id": answer["question_id"],
+                "question_text": answer["question_text"],
+                "question_category": answer["question_category"],
+                "selected_option_id": answer["selected_option_id"],
+                "selected_option_content": answer["selected_option_content"],
+                "is_correct": answer["is_correct"],
+                "answered_at": answer["answered_at"].isoformat() if answer["answered_at"] else None,
+            }
+            for answer in answered_questions
+        ]
+        
+        return {
+            "attempt_id": progress["id"],
+            "quiz_id": progress["quiz_id"],
+            "user_id": progress["user_id"],
+            "total_questions": progress["total_questions"],
+            "answered_questions": progress["answered_questions"],
+            "remaining_questions": progress["remaining_questions"],
+            "progress_percentage": round((progress["answered_questions"] / progress["total_questions"] * 100), 2),
+            "is_completed": progress["is_completed"],
+            "answered_details": answered_details,  # NEW: Detailed answered questions
         }

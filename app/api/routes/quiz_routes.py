@@ -129,7 +129,11 @@ def start_quiz_attempt(
     db = Depends(get_db)
 ):
     """
-    Start a new quiz attempt for the current user.
+    Start a new quiz attempt OR resume an ongoing attempt.
+    
+    **Behavior:**
+    - If user has NO ongoing attempt: Creates new attempt
+    - If user has ongoing attempt: Returns existing attempt (resume)
     
     **Authentication:** 
     - Automatically extracted from HTTP-only cookies or Authorization header
@@ -139,11 +143,12 @@ def start_quiz_attempt(
     - `quiz_id`: UUID of the quiz (path parameter)
     
     **Returns:**
-    - `attempt_id`: Unique ID for this attempt (SAVE THIS - needed for all answer submissions)
+    - `attempt_id`: Unique ID for this attempt (use for answer submissions)
     - `quiz_id`: The quiz being attempted
     - `user_id`: Your user ID (auto from JWT)
     - `total_questions`: Number of questions in this quiz
     - `is_completed`: false (until you submit)
+    - `is_resumed`: Boolean - true if resuming, false if new
     
     **Example Request:**
     ```
@@ -155,7 +160,7 @@ def start_quiz_attempt(
     - Authorization: Bearer <your-jwt-token>
     ```
     
-    **Example Response:**
+    **Example Response (New Attempt):**
     ```json
     {
       "status": "success",
@@ -164,10 +169,31 @@ def start_quiz_attempt(
         "quiz_id": "550e8400-e29b-41d4-a716-446655440000",
         "user_id": "880e8400-e29b-41d4-a716-446655440000",
         "total_questions": 10,
-        "is_completed": false
+        "is_completed": false,
+        "is_resumed": false
       }
     }
     ```
+    
+    **Example Response (Resumed Attempt):**
+    ```json
+    {
+      "status": "success",
+      "data": {
+        "attempt_id": "770e8400-e29b-41d4-a716-446655440000",
+        "quiz_id": "550e8400-e29b-41d4-a716-446655440000",
+        "user_id": "880e8400-e29b-41d4-a716-446655440000",
+        "total_questions": 10,
+        "is_completed": false,
+        "is_resumed": true
+      }
+    }
+    ```
+    
+    **⚠️ Important:**
+    - Check `is_resumed` to determine if this is new or continuation
+    - If resuming, frontend should fetch progress to show where user left off
+    - Same attempt_id is used for answer submissions
     """
     attempt = QuizService.start_quiz_attempt(db, quiz_id, user_id)
     
@@ -180,6 +206,141 @@ def start_quiz_attempt(
     return {
         "status": "success",
         "data": attempt
+    }
+
+
+@router.get("/{quiz_id}/attempts/{attempt_id}/progress", summary="Get attempt progress")
+def get_attempt_progress(
+    quiz_id: str,
+    attempt_id: str,
+    db = Depends(get_db)
+):
+    """
+    Get detailed progress of an ongoing attempt.
+    
+    **Use Cases:**
+    - When resuming: Show how many questions answered vs remaining
+    - Show which questions user already answered
+    - Show the user's previous answers
+    - Track progress percentage
+    - Before submit: Verify all questions answered
+    
+    **Parameters:**
+    - `quiz_id`: UUID of the quiz (path parameter)
+    - `attempt_id`: UUID of the attempt (path parameter)
+    
+    **Returns:**
+    - `attempt_id`: The attempt ID
+    - `quiz_id`: The quiz ID
+    - `user_id`: The user ID
+    - `total_questions`: Total questions in quiz
+    - `answered_questions`: Number of questions already answered
+    - `remaining_questions`: Number of questions still to answer
+    - `progress_percentage`: Progress as percentage (0-100)
+    - `is_completed`: Boolean - false if ongoing, true if submitted
+    - `answered_details`: Array of detailed answered questions (NEW!)
+      - `answer_id`: The answer submission ID
+      - `question_id`: The question ID
+      - `question_text`: The question content
+      - `question_category`: image_alphabet, image_options, or camera_based
+      - `selected_option_id`: The option user selected
+      - `selected_option_content`: The content of selected option
+      - `is_correct`: Whether the answer was correct
+      - `answered_at`: ISO timestamp when answered
+    
+    **Example Request:**
+    ```
+    GET /api/quizzes/550e8400-e29b-41d4-a716-446655440000/attempts/770e8400-e29b-41d4-a716-446655440000/progress
+    ```
+    
+    **Example Response:**
+    ```json
+    {
+      "status": "success",
+      "data": {
+        "attempt_id": "770e8400-e29b-41d4-a716-446655440000",
+        "quiz_id": "550e8400-e29b-41d4-a716-446655440000",
+        "user_id": "880e8400-e29b-41d4-a716-446655440000",
+        "total_questions": 10,
+        "answered_questions": 3,
+        "remaining_questions": 7,
+        "progress_percentage": 30.0,
+        "is_completed": false,
+        "answered_details": [
+          {
+            "answer_id": "990e8400-e29b-41d4-a716-446655440000",
+            "question_id": "660e8400-e29b-41d4-a716-446655440001",
+            "question_text": "https://signoria.gilanghuda.my.id/dict/dictionary/A.jpg",
+            "question_category": "image_alphabet",
+            "selected_option_id": "770e8400-e29b-41d4-a716-446655440001",
+            "selected_option_content": "A",
+            "is_correct": true,
+            "answered_at": "2025-11-24T10:15:30"
+          },
+          {
+            "answer_id": "991e8400-e29b-41d4-a716-446655440000",
+            "question_id": "660e8400-e29b-41d4-a716-446655440002",
+            "question_text": "Yang mana dibawah ini bahasa isyarat untuk huruf B?",
+            "question_category": "image_options",
+            "selected_option_id": "770e8400-e29b-41d4-a716-446655440002",
+            "selected_option_content": "https://signoria.gilanghuda.my.id/dict/dictionary/B.jpg",
+            "is_correct": false,
+            "answered_at": "2025-11-24T10:16:15"
+          },
+          {
+            "answer_id": "992e8400-e29b-41d4-a716-446655440000",
+            "question_id": "660e8400-e29b-41d4-a716-446655440003",
+            "question_text": "Praktikkan bahasa isyarat untuk huruf C",
+            "question_category": "camera_based",
+            "selected_option_id": "770e8400-e29b-41d4-a716-446655440003",
+            "selected_option_content": "C",
+            "is_correct": true,
+            "answered_at": "2025-11-24T10:17:00"
+          }
+        ]
+      }
+    }
+    ```
+    
+    **Usage in Frontend:**
+    ```javascript
+    // When user resumes quiz
+    const progress = await fetch(
+      \`/api/quizzes/\${quizId}/attempts/\${attemptId}/progress\`
+    ).then(r => r.json());
+    
+    const { data } = progress;
+    
+    // Show summary
+    console.log(\`Progress: \${data.progress_percentage}%\`);
+    console.log(\`Answered: \${data.answered_questions}/\${data.total_questions}\`);
+    console.log(\`Remaining: \${data.remaining_questions}\`);
+    
+    // Show previously answered questions
+    data.answered_details.forEach((answer, idx) => {
+      console.log(\`\nQuestion \${idx + 1}: \${answer.question_category}\`);
+      console.log(\`Your answer: \${answer.selected_option_content}\`);
+      console.log(\`Correct: \${answer.is_correct ? '✓' : '✗'}\`);
+      console.log(\`Answered at: \${answer.answered_at}\`);
+    });
+    
+    // Highlight which questions to answer next
+    const answered_ids = data.answered_details.map(a => a.question_id);
+    const remaining = allQuestions.filter(q => !answered_ids.includes(q.id));
+    console.log(\`Next question to answer: \${remaining[0]?.question_text}\`);
+    ```
+    """
+    progress = QuizService.get_attempt_progress(db, attempt_id)
+    
+    if not progress:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attempt not found"
+        )
+    
+    return {
+        "status": "success",
+        "data": progress
     }
 
 

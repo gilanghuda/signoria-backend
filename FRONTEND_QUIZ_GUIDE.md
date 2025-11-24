@@ -306,6 +306,128 @@ async function showResults(quizId, attemptId) {
 
 ---
 
+## 🔄 Resume Quiz Feature
+
+### Auto-Resume Ongoing Attempts
+
+When user starts a quiz, the system checks:
+- **If NO ongoing attempt exists**: Creates new one
+- **If ongoing attempt exists**: Returns existing one (resume)
+
+**Frontend receives `is_resumed` flag** to handle accordingly.
+
+### Implementation
+
+```javascript
+async function startOrResumeQuiz(quizId) {
+  try {
+    const response = await fetch(
+      `http://localhost:8000/api/quizzes/${quizId}/attempts`,
+      { method: 'POST' }
+    );
+    
+    const data = await response.json();
+    const { attempt_id, is_resumed } = data.data;
+    
+    if (is_resumed) {
+      // User is resuming - show progress
+      console.log('📝 Resuming quiz...');
+      
+      // Get progress to show where user left off
+      const progress = await getAttemptProgress(quizId, attempt_id);
+      console.log(`Progress: ${progress.answered_questions}/${progress.total_questions}`);
+      
+      // Load quiz details and skip to next unanswered question
+      const quiz = await getQuizDetails(quizId);
+      const answeredIds = await getAnsweredQuestionIds(attempt_id);
+      const nextQuestion = quiz.questions.find(q => !answeredIds.includes(q.id));
+      
+      displayQuestion(nextQuestion);
+      
+    } else {
+      // New attempt
+      console.log('✨ Starting new quiz...');
+      const quiz = await getQuizDetails(quizId);
+      displayQuestion(quiz.questions[0]);
+    }
+    
+    return attempt_id;
+    
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+```
+
+### Get Attempt Progress
+
+```javascript
+async function getAttemptProgress(quizId, attemptId) {
+  try {
+    const response = await fetch(
+      `http://localhost:8000/api/quizzes/${quizId}/attempts/${attemptId}/progress`
+    );
+    
+    const data = await response.json();
+    const progress = data.data;
+    
+    console.log(`Answered: ${progress.answered_questions}/${progress.total_questions}`);
+    console.log(`Progress: ${progress.progress_percentage}%`);
+    console.log(`Remaining: ${progress.remaining_questions} questions`);
+    
+    // Update progress bar
+    updateProgressBar(progress.progress_percentage);
+    
+    return progress;
+    
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
+```
+
+---
+
+## 📱 Updated Quiz Flow with Resume
+
+```
+┌──────────────────────────────────────────────────┐
+│ 1. POST /api/quizzes/{quiz_id}/attempts          │
+│    (Check for ongoing attempt)                   │
+└────────────┬─────────────────────────────────────┘
+             │
+      ┌──────┴──────┐
+      │             │
+      ▼             ▼
+ ✨ New       📝 Resumed
+      │             │
+      ▼             ▼
+  Create      Get Progress
+  Attempt         │
+      │           ▼
+      │       GET /progress
+      │           │
+      │           ▼
+      └─────┬────────┘
+            │
+            ▼
+    Display Quiz/Position
+            │
+            ▼
+  Loop through questions
+            │
+            ▼
+   POST /answers or /camera-answers
+            │
+            ▼
+   POST /submit
+            │
+            ▼
+   GET /result
+```
+
+---
+
 ## 📋 Complete Example Flow
 
 ```javascript
