@@ -226,4 +226,113 @@ class QuizService:
                 "message": "Camera option not found",
                 "data": None
             }
-       
+        answer_id = str(uuid.uuid4())
+        answer = QuizRepository.create_attempt_answer(connection, answer_id, attempt_id, question_id, camera_option["id"])
+        
+        return {
+            "error": False,
+            "code": "SUCCESS",
+            "message": "Camera answer submitted successfully",
+            "data": {
+                "answer_id": answer["id"],
+                "attempt_id": answer["attempt_id"],
+                "question_id": answer["question_id"],
+                "is_correct": is_correct,
+            }
+        }
+    
+    @staticmethod
+    def submit_quiz(connection, attempt_id: str):
+        """Submit/complete a quiz attempt and calculate final score"""
+        attempt = QuizRepository.get_attempt_by_id(connection, attempt_id)
+        
+        if not attempt:
+            return None
+        
+        answers = QuizRepository.get_attempt_answers(connection, attempt_id)
+        
+        # Calculate score
+        correct_count = 0
+        for answer in answers:
+            option = QuizRepository.get_option_by_id(connection, answer["selected_option_id"])
+            if option and option["is_correct"]:
+                correct_count += 1
+        
+        # Update attempt
+        attempt = QuizRepository.update_attempt_score(connection, attempt_id, correct_count)
+        
+        return {
+            "attempt_id": attempt["id"],
+            "quiz_id": attempt["quiz_id"],
+            "user_id": attempt["user_id"],
+            "score": attempt["score"],
+            "total_questions": attempt["total_questions"],
+            "percentage": round((attempt["score"] / attempt["total_questions"] * 100), 2),
+            "is_completed": attempt["is_completed"],
+            "submitted_at": attempt["submitted_at"].isoformat() if attempt["submitted_at"] else None,
+        }
+    
+    @staticmethod
+    def get_attempt_progress(connection, attempt_id: str):
+        """Get detailed progress of an ongoing attempt"""
+        progress = QuizRepository.get_attempt_progress(connection, attempt_id)
+        
+        if not progress:
+            return None
+        
+        # Get detailed answered questions
+        answered_details = QuizRepository.get_answered_questions_details(connection, attempt_id)
+        
+        # Calculate progress percentage
+        progress_percentage = 0
+        if progress["total_questions"] > 0:
+            progress_percentage = round((progress["answered_questions"] / progress["total_questions"] * 100), 2)
+        
+        return {
+            "attempt_id": progress["id"],
+            "quiz_id": progress["quiz_id"],
+            "user_id": progress["user_id"],
+            "total_questions": progress["total_questions"],
+            "answered_questions": progress["answered_questions"],
+            "remaining_questions": progress["remaining_questions"],
+            "progress_percentage": progress_percentage,
+            "is_completed": progress["is_completed"],
+            "answered_details": answered_details,
+        }
+    
+    @staticmethod
+    def get_attempt_result(connection, attempt_id: str):
+        """Get detailed attempt result"""
+        attempt = QuizRepository.get_attempt_by_id(connection, attempt_id)
+        
+        if not attempt:
+            return None
+        
+        answers = QuizRepository.get_attempt_answers(connection, attempt_id)
+        
+        answers_detail = []
+        for answer in answers:
+            question = QuizRepository.get_question_by_id(connection, answer["question_id"])
+            option = QuizRepository.get_option_by_id(connection, answer["selected_option_id"])
+            
+            answers_detail.append({
+                "question_id": answer["question_id"],
+                "question_text": question["question_text"] if question else None,
+                "question_category": question["question_category"] if question else None,
+                "selected_option_id": answer["selected_option_id"],
+                "selected_option_content": option["content"] if option else None,
+                "is_correct": option["is_correct"] if option else False,
+                "explanation": question["explanation"] if question else None,
+            })
+        
+        return {
+            "attempt_id": attempt["id"],
+            "quiz_id": attempt["quiz_id"],
+            "user_id": attempt["user_id"],
+            "score": attempt["score"],
+            "total_questions": attempt["total_questions"],
+            "percentage": round((attempt["score"] / attempt["total_questions"] * 100), 2),
+            "is_completed": attempt["is_completed"],
+            "submitted_at": attempt["submitted_at"].isoformat() if attempt["submitted_at"] else None,
+            "answers": answers_detail,
+        }
